@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Capacitor
 import OAuthSwift
 import CommonCrypto
@@ -15,9 +16,9 @@ public class GenericOAuth2Plugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "GenericOAuth2Plugin"
     public let jsName = "GenericOAuth2"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "refreshToken", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "authenticate", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "logout", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "refreshToken", returnType: .promise),
+        CAPPluginMethod(name: "authenticate", returnType: .promise),
+        CAPPluginMethod(name: "logout", returnType: .promise),
     ]
 
     var savedPluginCall: CAPPluginCall?
@@ -255,7 +256,7 @@ public class GenericOAuth2Plugin: CAPPlugin, CAPBridgedPlugin {
             }
 
             // Sign in with Apple
-            if baseUrl.contains("appleid.apple.com"), #available(iOS 13.0, *) {
+            if baseUrl.contains("appleid.apple.com") {
                 self.handleSignInWithApple(call)
             } else {
                 guard let responseType = getOverwritableString(call, PARAM_RESPONSE_TYPE), !responseType.isEmpty else {
@@ -582,7 +583,6 @@ extension Data {
     }
 }
 
-@available(iOS 13.0, *)
 extension GenericOAuth2Plugin: ASAuthorizationControllerDelegate {
 
     func handleSignInWithApple(_ call: CAPPluginCall) {

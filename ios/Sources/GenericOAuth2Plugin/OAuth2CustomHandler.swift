@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Capacitor
 
 @objc public protocol OAuth2CustomHandler: NSObjectProtocol {

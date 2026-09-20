@@ -1,25 +1,15 @@
 import XCTest
-@testable import GenericOAuth2Plugin
+@testable import CapacitorCommunityGenericOauth2
 
 class GenericOAuth2Tests: XCTestCase {
-    override func setUp() {
-        super.setUp()
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-    }
+    func testPluginRegistration() {
+        let plugin = GenericOAuth2Plugin()
 
-    override func tearDown() {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-        super.tearDown()
-    }
-
-    func testEcho() {
-        // This is an example of a functional test case for a plugin.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-
-        let implementation = GenericOAuth2()
-        let value = "Hello, World!"
-        let result = implementation.echo(value)
-
-        XCTAssertEqual(value, result)
+        XCTAssertEqual("GenericOAuth2Plugin", plugin.identifier)
+        XCTAssertEqual("GenericOAuth2", plugin.jsName)
+        XCTAssertEqual(["refreshToken", "authenticate", "logout"], plugin.pluginMethods.map { $0.name })
+        for method in plugin.pluginMethods {
+            XCTAssertTrue(plugin.responds(to: method.selector), "\(method.name) is not exposed to Objective-C")
+        }
     }
 }

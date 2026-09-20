@@ -35,6 +35,8 @@ npx cap sync
 | 6.x    | 6.x.x         | [README](https://github.com/capacitor-community/generic-oauth2/blob/6.1.0/README.md) | Breaking changes. As of this version the changelog will be available in the Releases tab in GitHub. XCode 15.0 needs this version |
 | 5.x    | 5.x.x         | [README](https://github.com/capacitor-community/generic-oauth2/blob/5.0.0/README.md) | Breaking changes see Changelog. XCode 14.1 needs this version                                                                     |
 
+This branch requires the forked Capacitor 8 runtime (Android in Kotlin, iOS in Swift), iOS 17 and Android 13 (API 33).
+
 ## Supported flows
 
 See the excellent article about OAuth2 response type combinations.
