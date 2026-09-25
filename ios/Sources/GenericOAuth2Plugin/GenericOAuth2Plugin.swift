@@ -16,9 +16,9 @@ public class GenericOAuth2Plugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "GenericOAuth2Plugin"
     public let jsName = "GenericOAuth2"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "refreshToken", returnType: .promise),
-        CAPPluginMethod(name: "authenticate", returnType: .promise),
-        CAPPluginMethod(name: "logout", returnType: .promise),
+        .promise("refreshToken", GenericOAuth2Plugin.refreshToken),
+        .promise("authenticate", GenericOAuth2Plugin.authenticate),
+        .promise("logout", GenericOAuth2Plugin.logout)
     ]
 
     var savedPluginCall: CAPPluginCall?
@@ -112,23 +112,25 @@ public class GenericOAuth2Plugin: CAPPlugin, CAPBridgedPlugin {
         OAuth2Swift.handle(url: url)
     }
 
+    // The three methods stay synchronous promise methods that answer from OAuthSwift's completion handlers, the Safari
+    // and Sign in with Apple delegates and the app's custom handlers. Several of those can end one authenticate call,
+    // some never call back (OAuthSwift waits for a redirect that may not come), and a custom handler is app code: a
+    // continuation would have to be resumed exactly once on paths this plugin does not control.
+
     /*
      * Plugin function to refresh tokens
      */
-    @objc func refreshToken(_ call: CAPPluginCall) {
+    func refreshToken(_ call: CAPPluginCall) throws {
         guard let appId = getOverwritableString(call, PARAM_APP_ID) else {
-            call.reject(self.ERR_PARAM_NO_APP_ID)
-            return
+            throw CAPPluginError(self.ERR_PARAM_NO_APP_ID)
         }
 
         guard let accessTokenEndpoint = getOverwritableString(call, PARAM_ACCESS_TOKEN_ENDPOINT) else {
-            call.reject(self.ERR_PARAM_NO_ACCESS_TOKEN_ENDPOINT)
-            return
+            throw CAPPluginError(self.ERR_PARAM_NO_ACCESS_TOKEN_ENDPOINT)
         }
 
         guard let refreshToken = getOverwritableString(call, PARAM_REFRESH_TOKEN) else {
-            call.reject(self.ERR_PARAM_NO_REFRESH_TOKEN)
-            return
+            throw CAPPluginError(self.ERR_PARAM_NO_REFRESH_TOKEN)
         }
 
         let oauthSwift = OAuth2Swift(
@@ -171,12 +173,11 @@ public class GenericOAuth2Plugin: CAPPlugin, CAPBridgedPlugin {
                     let responseBodyString = (nsError.userInfo["Response-Body"]) as? String
                     self.log("Authorization failed with requestError \(responseBodyString ?? "")")
 
-                    do {
-                        let responseBody = Data((responseBodyString ?? "").utf8)
-                        if let json = try JSONSerialization.jsonObject(with: responseBody, options: []) as? [String: Any] {
-                            call.reject(json["error"] as? String ?? self.ERR_GENERAL, String(errorCode), underlyingError, json)
-                        }
-                    } catch {
+                    let responseBody = Data((responseBodyString ?? "").utf8)
+                    if let json = (try? JSONSerialization.jsonObject(with: responseBody, options: [])) as? [String: Any] {
+                        call.reject(json["error"] as? String ?? self.ERR_GENERAL, String(errorCode), underlyingError, json)
+                    } else {
+                        // Not JSON, or JSON that is not an object: the call was left unanswered for the latter
                         call.reject(self.ERR_GENERAL, String(errorCode), underlyingError)
                     }
                 default:
@@ -190,10 +191,9 @@ public class GenericOAuth2Plugin: CAPPlugin, CAPBridgedPlugin {
     /*
      * Plugin function to authenticate
      */
-    @objc func authenticate(_ call: CAPPluginCall) {
+    func authenticate(_ call: CAPPluginCall) throws {
         guard let appId = getOverwritableString(call, PARAM_APP_ID), !appId.isEmpty else {
-            call.reject(self.ERR_PARAM_NO_APP_ID)
-            return
+            throw CAPPluginError(self.ERR_PARAM_NO_APP_ID)
         }
         let resourceUrl = getOverwritableString(call, self.PARAM_RESOURCE_URL)
         let logsEnabled: Bool = getOverwritable(call, self.PARAM_LOGS_ENABLED) as? Bool ?? false
@@ -251,8 +251,7 @@ public class GenericOAuth2Plugin: CAPPlugin, CAPBridgedPlugin {
             }
         } else {
             guard let baseUrl = getOverwritableString(call, PARAM_AUTHORIZATION_BASE_URL), !baseUrl.isEmpty else {
-                call.reject(self.ERR_PARAM_NO_AUTHORIZATION_BASE_URL)
-                return
+                throw CAPPluginError(self.ERR_PARAM_NO_AUTHORIZATION_BASE_URL)
             }
 
             // Sign in with Apple
@@ -260,13 +259,11 @@ public class GenericOAuth2Plugin: CAPPlugin, CAPBridgedPlugin {
                 self.handleSignInWithApple(call)
             } else {
                 guard let responseType = getOverwritableString(call, PARAM_RESPONSE_TYPE), !responseType.isEmpty else {
-                    call.reject(self.ERR_PARAM_NO_RESPONSE_TYPE)
-                    return
+                    throw CAPPluginError(self.ERR_PARAM_NO_RESPONSE_TYPE)
                 }
 
                 guard let redirectUrl = getOverwritableString(call, PARAM_REDIRECT_URL), !redirectUrl.isEmpty else {
-                    call.reject(self.ERR_PARAM_NO_REDIRECT_URL)
-                    return
+                    throw CAPPluginError(self.ERR_PARAM_NO_REDIRECT_URL)
                 }
 
                 var oauthSwift: OAuth2Swift
@@ -330,7 +327,7 @@ public class GenericOAuth2Plugin: CAPPlugin, CAPBridgedPlugin {
     /*
      * Plugin function to refresh tokens
      */
-    @objc func logout(_ call: CAPPluginCall) {
+    func logout(_ call: CAPPluginCall) {
         if let handlerClassName = getString(call, PARAM_CUSTOM_HANDLER_CLASS) {
             if let handlerInstance = self.getOrLoadHandlerInstance(className: handlerClassName) {
                 let success: Bool! = handlerInstance.logout(viewController: (bridge?.viewController!)!, call: call)
