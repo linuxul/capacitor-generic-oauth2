@@ -9,11 +9,14 @@ import androidx.activity.result.ActivityResult
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
+import com.getcapacitor.PluginException
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.community.genericoauth2.handler.AccessTokenCallback
 import com.getcapacitor.community.genericoauth2.handler.OAuth2CustomHandler
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 import net.openid.appauth.AuthState
 import net.openid.appauth.AuthorizationException
 import net.openid.appauth.AuthorizationRequest
@@ -24,6 +27,7 @@ import net.openid.appauth.EndSessionRequest
 import net.openid.appauth.EndSessionResponse
 import net.openid.appauth.GrantTypeValues
 import net.openid.appauth.TokenRequest
+import net.openid.appauth.TokenResponse
 import org.json.JSONException
 
 @CapacitorPlugin(name = "GenericOAuth2")
@@ -33,28 +37,17 @@ public class GenericOAuth2Plugin : Plugin() {
     private var authState: AuthState? = null
     private var callbackId: String? = null
 
+    /**
+     * Waits for AppAuth's answer to the token request, which calls back once, and returns the token response.
+     */
     @PluginMethod
-    public fun refreshToken(call: PluginCall) {
+    public suspend fun refreshToken(call: PluginCall): JSObject {
         disposeAuthService()
         val options = buildRefreshTokenOptions(call.data)
 
-        val appId = options.appId
-        if (appId == null) {
-            call.reject(ERR_PARAM_NO_APP_ID)
-            return
-        }
-
-        val accessTokenEndpoint = options.accessTokenEndpoint
-        if (accessTokenEndpoint == null) {
-            call.reject(ERR_PARAM_NO_ACCESS_TOKEN_ENDPOINT)
-            return
-        }
-
-        val refreshToken = options.refreshToken
-        if (refreshToken == null) {
-            call.reject(ERR_PARAM_NO_REFRESH_TOKEN)
-            return
-        }
+        val appId = options.appId ?: throw PluginException(ERR_PARAM_NO_APP_ID)
+        val accessTokenEndpoint = options.accessTokenEndpoint ?: throw PluginException(ERR_PARAM_NO_ACCESS_TOKEN_ENDPOINT)
+        val refreshToken = options.refreshToken ?: throw PluginException(ERR_PARAM_NO_REFRESH_TOKEN)
 
         val service = AuthorizationService(context)
         authService = service
@@ -70,20 +63,24 @@ public class GenericOAuth2Plugin : Plugin() {
                 .setRefreshToken(refreshToken)
                 .build()
 
-        service.performTokenRequest(tokenRequest) { response, ex ->
-            state.update(response, ex)
-            if (ex != null) {
-                val message = ex.error ?: ERR_GENERAL
-                call.reject(message, ex.code.toString(), ex)
-            } else if (response != null) {
-                try {
-                    call.resolve(JSObject(response.jsonSerializeString()))
-                } catch (e: JSONException) {
-                    call.reject(ERR_GENERAL, ex = e)
+        val (response, ex) =
+            suspendCoroutine<Pair<TokenResponse?, AuthorizationException?>> { continuation ->
+                service.performTokenRequest(tokenRequest) { response, ex ->
+                    state.update(response, ex)
+                    continuation.resume(response to ex)
                 }
-            } else {
-                call.reject(ERR_NO_ACCESS_TOKEN)
             }
+
+        if (ex != null) {
+            throw PluginException(ex.error ?: ERR_GENERAL, ex.code.toString(), cause = ex)
+        }
+        if (response == null) {
+            throw PluginException(ERR_NO_ACCESS_TOKEN)
+        }
+        try {
+            return JSObject(response.jsonSerializeString())
+        } catch (e: JSONException) {
+            throw PluginException(ERR_GENERAL, cause = e)
         }
     }
 
@@ -133,29 +130,10 @@ public class GenericOAuth2Plugin : Plugin() {
             // ### Validate required parameter ###
             // ###################################
 
-            val appId = options.appId
-            if (appId == null) {
-                call.reject(ERR_PARAM_NO_APP_ID)
-                return
-            }
-
-            val authorizationBaseUrl = options.authorizationBaseUrl
-            if (authorizationBaseUrl == null) {
-                call.reject(ERR_PARAM_NO_AUTHORIZATION_BASE_URL)
-                return
-            }
-
-            val responseType = options.responseType
-            if (responseType == null) {
-                call.reject(ERR_PARAM_NO_RESPONSE_TYPE)
-                return
-            }
-
-            val redirectUrl = options.redirectUrl
-            if (redirectUrl == null) {
-                call.reject(ERR_PARAM_NO_REDIRECT_URL)
-                return
-            }
+            val appId = options.appId ?: throw PluginException(ERR_PARAM_NO_APP_ID)
+            val authorizationBaseUrl = options.authorizationBaseUrl ?: throw PluginException(ERR_PARAM_NO_AUTHORIZATION_BASE_URL)
+            val responseType = options.responseType ?: throw PluginException(ERR_PARAM_NO_RESPONSE_TYPE)
+            val redirectUrl = options.redirectUrl ?: throw PluginException(ERR_PARAM_NO_REDIRECT_URL)
 
             // ### Configure
 
